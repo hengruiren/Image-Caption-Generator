@@ -183,4 +183,3 @@ Recommended next steps:
 
 ## Team
 
-- Hengrui Ren

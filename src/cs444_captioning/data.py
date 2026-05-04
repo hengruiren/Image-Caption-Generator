@@ -1,3 +1,4 @@
+import json
 import random
 from pathlib import Path
 
@@ -82,6 +83,176 @@ def load_flickr8k_captions(caption_path):
     return out[out["caption"].str.len() > 0].reset_index(drop=True)
 
 
+def attach_image_paths(df, image_dir, source):
+    out = df.copy()
+    image_dir = Path(image_dir)
+    out["image"] = out["image"].astype(str)
+    out["caption"] = out["caption"].astype(str).str.strip()
+    out["source"] = source
+    out["image_path"] = out["image"].apply(lambda name: str(image_dir / name))
+    return out[out["caption"].str.len() > 0].reset_index(drop=True)
+
+
+def load_flickr8k_dataframe(data_root, source="flickr8k"):
+    data_root = auto_find_data_root(data_root)
+    caption_file = find_caption_file(data_root)
+    image_dir = find_image_dir(data_root)
+    df = load_flickr8k_captions(caption_file)
+    return attach_image_paths(df, image_dir, source), image_dir, caption_file
+
+
+def find_vizwiz_annotation_file(data_root, split):
+    data_root = Path(data_root)
+    split = split.lower()
+    split_names = [split]
+    if split == "val":
+        split_names.append("validation")
+    elif split == "validation":
+        split_names.append("val")
+
+    candidates = [
+        path
+        for split_name in split_names
+        for path in [
+            data_root / f"{split_name}.json",
+            data_root / f"{split_name}_annotations.json",
+            data_root / f"VizWiz_{split_name}.json",
+            data_root / "annotations" / f"{split_name}.json",
+            data_root / "annotations" / f"{split_name}_annotations.json",
+            data_root / "annotations" / f"VizWiz_{split_name}.json",
+        ]
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+
+    matches = sorted(
+        path
+        for path in data_root.rglob("*.json")
+        if any(split_name in path.stem.lower() for split_name in split_names) and "caption" in path.stem.lower()
+    )
+    if not matches:
+        matches = sorted(
+            path
+            for path in data_root.rglob("*.json")
+            if any(split_name in path.stem.lower() for split_name in split_names)
+        )
+    if matches:
+        return matches[0]
+
+    raise FileNotFoundError(f"Could not find VizWiz {split} annotation JSON under {data_root}")
+
+
+def find_vizwiz_image_dir(data_root, split):
+    data_root = Path(data_root)
+    split = split.lower()
+    split_names = [split]
+    if split == "val":
+        split_names.append("validation")
+    elif split == "validation":
+        split_names.append("val")
+    preferred = [
+        name
+        for split_name in split_names
+        for name in [
+            split_name,
+            f"{split_name}_images",
+            f"vizwiz_{split_name}",
+            f"VizWiz_{split_name}",
+        ]
+    ] + [
+        "Images",
+        "images",
+    ]
+    for name in preferred:
+        matches = [path for path in data_root.rglob(name) if path.is_dir()]
+        for path in matches:
+            if any(path.glob("*.jpg")) or any(path.glob("*.jpeg")) or any(path.glob("*.png")):
+                return path
+
+    prefixes = [f"vizwiz_{split_name}_" for split_name in split_names]
+    for path in data_root.rglob("*"):
+        if path.is_dir() and any(
+            any(p.name.lower().startswith(prefix) for prefix in prefixes) for p in path.glob("*.jpg")
+        ):
+            return path
+
+    raise FileNotFoundError(f"Could not find VizWiz {split} image directory under {data_root}")
+
+
+def load_vizwiz_captions(annotation_path, image_dir, include_rejected=False, include_precanned=False):
+    annotation_path = Path(annotation_path)
+    image_dir = Path(image_dir)
+    with open(annotation_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    images = payload.get("images", [])
+    annotations = payload.get("annotations", [])
+    image_by_id = {item["id"]: item["file_name"] for item in images}
+    text_detected_by_id = {item["id"]: item.get("text_detected") for item in images}
+
+    rows = []
+    for annotation in annotations:
+        if annotation.get("is_rejected", False) and not include_rejected:
+            continue
+        if annotation.get("is_precanned", False) and not include_precanned:
+            continue
+
+        image_id = annotation["image_id"]
+        file_name = image_by_id.get(image_id)
+        if file_name is None:
+            continue
+
+        caption = str(annotation.get("caption", "")).strip()
+        if not caption:
+            continue
+
+        rows.append(
+            {
+                "image": f"vizwiz/{file_name}",
+                "caption": caption,
+                "source": "vizwiz",
+                "image_path": str(image_dir / file_name),
+                "source_image_id": image_id,
+                "text_detected": text_detected_by_id.get(image_id),
+            }
+        )
+
+    return pd.DataFrame(rows).reset_index(drop=True)
+
+
+def sample_caption_images(df, max_images=None, seed=444):
+    if max_images is None:
+        return df.reset_index(drop=True)
+
+    images = sorted(df["image"].unique().tolist())
+    if len(images) <= max_images:
+        return df.reset_index(drop=True)
+
+    rng = random.Random(seed)
+    selected = set(rng.sample(images, max_images))
+    return df[df["image"].isin(selected)].reset_index(drop=True)
+
+
+def load_vizwiz_split(
+    data_root,
+    split="train",
+    max_images=None,
+    seed=444,
+    include_rejected=False,
+    include_precanned=False,
+):
+    annotation_file = find_vizwiz_annotation_file(data_root, split)
+    image_dir = find_vizwiz_image_dir(data_root, split)
+    df = load_vizwiz_captions(
+        annotation_file,
+        image_dir,
+        include_rejected=include_rejected,
+        include_precanned=include_precanned,
+    )
+    return sample_caption_images(df, max_images=max_images, seed=seed), image_dir, annotation_file
+
+
 def split_by_image(df, train_ratio=0.8, val_ratio=0.1, seed=444):
     images = sorted(df["image"].unique().tolist())
     rng = random.Random(seed)
@@ -99,6 +270,51 @@ def split_by_image(df, train_ratio=0.8, val_ratio=0.1, seed=444):
     return train_df, val_df, test_df
 
 
+def build_flickr8k_vizwiz_splits(
+    flickr8k_root=Path("./data/flickr8k"),
+    vizwiz_root=Path("./data/vizwiz"),
+    vizwiz_train_images=10000,
+    vizwiz_val_images=1000,
+    seed=444,
+):
+    flickr_df, flickr_image_dir, flickr_caption_file = load_flickr8k_dataframe(flickr8k_root)
+    flickr_train_df, flickr_val_df, flickr_test_df = split_by_image(flickr_df, seed=seed)
+
+    vizwiz_train_df, vizwiz_train_image_dir, vizwiz_train_annotation = load_vizwiz_split(
+        vizwiz_root,
+        split="train",
+        max_images=vizwiz_train_images,
+        seed=seed,
+    )
+    vizwiz_val_df, vizwiz_val_image_dir, vizwiz_val_annotation = load_vizwiz_split(
+        vizwiz_root,
+        split="val",
+        max_images=vizwiz_val_images,
+        seed=seed,
+    )
+
+    train_df = pd.concat([flickr_train_df, vizwiz_train_df], ignore_index=True)
+    val_df = pd.concat([flickr_val_df, vizwiz_val_df], ignore_index=True)
+    test_df = flickr_test_df.reset_index(drop=True)
+    metadata = {
+        "flickr8k_image_dir": flickr_image_dir,
+        "flickr8k_caption_file": flickr_caption_file,
+        "vizwiz_train_image_dir": vizwiz_train_image_dir,
+        "vizwiz_train_annotation": vizwiz_train_annotation,
+        "vizwiz_val_image_dir": vizwiz_val_image_dir,
+        "vizwiz_val_annotation": vizwiz_val_annotation,
+        "vizwiz_train_images": vizwiz_train_df["image"].nunique(),
+        "vizwiz_val_images": vizwiz_val_df["image"].nunique(),
+    }
+    return train_df, val_df, test_df, metadata
+
+
+def resolve_image_path(row, image_dir):
+    if "image_path" in row and pd.notna(row["image_path"]):
+        return Path(row["image_path"])
+    return Path(image_dir) / row["image"]
+
+
 class Flickr8kCaptionDataset(Dataset):
     def __init__(self, df, image_dir, image_processor, tokenizer, max_length=40):
         self.df = df.reset_index(drop=True)
@@ -112,7 +328,7 @@ class Flickr8kCaptionDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        image_path = self.image_dir / row["image"]
+        image_path = resolve_image_path(row, self.image_dir)
         image = Image.open(image_path).convert("RGB")
         pixel_values = self.image_processor(images=image, return_tensors="pt").pixel_values.squeeze(0)
         tokenized = self.tokenizer(
@@ -128,6 +344,7 @@ class Flickr8kCaptionDataset(Dataset):
             "pixel_values": pixel_values,
             "labels": labels,
             "image_id": row["image"],
+            "image_path": str(image_path),
             "caption": row["caption"],
         }
 
@@ -137,10 +354,10 @@ def collate_caption_batch(batch):
         "pixel_values": torch.stack([x["pixel_values"] for x in batch]),
         "labels": torch.stack([x["labels"] for x in batch]),
         "image_id": [x["image_id"] for x in batch],
+        "image_path": [x["image_path"] for x in batch],
         "caption": [x["caption"] for x in batch],
     }
 
 
 def build_reference_map(df):
     return df.groupby("image")["caption"].apply(list).to_dict()
-

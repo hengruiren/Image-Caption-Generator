@@ -104,13 +104,23 @@ def load_flickr8k_dataframe(data_root, source="flickr8k"):
 def find_vizwiz_annotation_file(data_root, split):
     data_root = Path(data_root)
     split = split.lower()
+    split_names = [split]
+    if split == "val":
+        split_names.append("validation")
+    elif split == "validation":
+        split_names.append("val")
+
     candidates = [
-        data_root / f"{split}.json",
-        data_root / f"{split}_annotations.json",
-        data_root / f"VizWiz_{split}.json",
-        data_root / "annotations" / f"{split}.json",
-        data_root / "annotations" / f"{split}_annotations.json",
-        data_root / "annotations" / f"VizWiz_{split}.json",
+        path
+        for split_name in split_names
+        for path in [
+            data_root / f"{split_name}.json",
+            data_root / f"{split_name}_annotations.json",
+            data_root / f"VizWiz_{split_name}.json",
+            data_root / "annotations" / f"{split_name}.json",
+            data_root / "annotations" / f"{split_name}_annotations.json",
+            data_root / "annotations" / f"VizWiz_{split_name}.json",
+        ]
     ]
     for path in candidates:
         if path.exists():
@@ -119,10 +129,14 @@ def find_vizwiz_annotation_file(data_root, split):
     matches = sorted(
         path
         for path in data_root.rglob("*.json")
-        if split in path.stem.lower() and "caption" in path.stem.lower()
+        if any(split_name in path.stem.lower() for split_name in split_names) and "caption" in path.stem.lower()
     )
     if not matches:
-        matches = sorted(path for path in data_root.rglob("*.json") if split in path.stem.lower())
+        matches = sorted(
+            path
+            for path in data_root.rglob("*.json")
+            if any(split_name in path.stem.lower() for split_name in split_names)
+        )
     if matches:
         return matches[0]
 
@@ -132,11 +146,21 @@ def find_vizwiz_annotation_file(data_root, split):
 def find_vizwiz_image_dir(data_root, split):
     data_root = Path(data_root)
     split = split.lower()
+    split_names = [split]
+    if split == "val":
+        split_names.append("validation")
+    elif split == "validation":
+        split_names.append("val")
     preferred = [
-        split,
-        f"{split}_images",
-        f"vizwiz_{split}",
-        f"VizWiz_{split}",
+        name
+        for split_name in split_names
+        for name in [
+            split_name,
+            f"{split_name}_images",
+            f"vizwiz_{split_name}",
+            f"VizWiz_{split_name}",
+        ]
+    ] + [
         "Images",
         "images",
     ]
@@ -146,9 +170,11 @@ def find_vizwiz_image_dir(data_root, split):
             if any(path.glob("*.jpg")) or any(path.glob("*.jpeg")) or any(path.glob("*.png")):
                 return path
 
-    prefix = f"vizwiz_{split}_"
+    prefixes = [f"vizwiz_{split_name}_" for split_name in split_names]
     for path in data_root.rglob("*"):
-        if path.is_dir() and any(p.name.lower().startswith(prefix) for p in path.glob("*.jpg")):
+        if path.is_dir() and any(
+            any(p.name.lower().startswith(prefix) for prefix in prefixes) for p in path.glob("*.jpg")
+        ):
             return path
 
     raise FileNotFoundError(f"Could not find VizWiz {split} image directory under {data_root}")
@@ -318,6 +344,7 @@ class Flickr8kCaptionDataset(Dataset):
             "pixel_values": pixel_values,
             "labels": labels,
             "image_id": row["image"],
+            "image_path": str(image_path),
             "caption": row["caption"],
         }
 
@@ -327,6 +354,7 @@ def collate_caption_batch(batch):
         "pixel_values": torch.stack([x["pixel_values"] for x in batch]),
         "labels": torch.stack([x["labels"] for x in batch]),
         "image_id": [x["image_id"] for x in batch],
+        "image_path": [x["image_path"] for x in batch],
         "caption": [x["caption"] for x in batch],
     }
 

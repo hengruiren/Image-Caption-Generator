@@ -4,6 +4,8 @@ CS444 final project on cross-modal alignment for image captioning.
 
 This project studies how to connect a pretrained vision encoder with a pretrained language decoder for image caption generation. The current baseline uses a ViT image encoder and GPT-2 text decoder through cross-attention. The planned experiments compare whether pretrained image-text alignment from CLIP and an explicit MLP mapping module improve caption quality.
 
+The data plan uses Flickr8k as a clean benchmark and VizWiz-Captions as a newer real-world accessibility dataset.
+
 ## Project Goal
 
 Image captioning requires a model to understand visual content and generate a fluent natural-language description. A central challenge is that pretrained vision models and pretrained language models usually live in different representation spaces.
@@ -73,11 +75,14 @@ In progress / planned:
         └── visualization.py
 ```
 
-## Dataset
+## Datasets
 
-Primary dataset: Flickr8k.
+Primary datasets:
 
-Expected local layout:
+- Flickr8k: clean image-caption benchmark.
+- VizWiz-Captions: real-world images taken by people who are blind, with five human captions per image.
+
+Expected Flickr8k layout:
 
 ```text
 data/flickr8k/
@@ -85,6 +90,21 @@ data/flickr8k/
 └── Images/
     ├── image_1.jpg
     ├── image_2.jpg
+    └── ...
+```
+
+Expected VizWiz layout:
+
+```text
+data/vizwiz/
+├── annotations/
+│   ├── train.json
+│   └── val.json
+├── train/
+│   ├── VizWiz_train_00000000.jpg
+│   └── ...
+└── val/
+    ├── VizWiz_val_00000000.jpg
     └── ...
 ```
 
@@ -97,6 +117,7 @@ The data loader also tries to auto-detect common Kaggle layouts such as:
 Dataset source:
 
 - Kaggle Flickr8k: https://www.kaggle.com/datasets/adityajn105/flickr8k
+- VizWiz-Captions: https://vizwiz.org/tasks-and-datasets/image-captioning/
 
 ## Setup
 
@@ -150,6 +171,27 @@ image_processor, tokenizer = load_processors(cfg)
 model = build_vit_gpt2_baseline(cfg, tokenizer, device, freeze_encoder=True)
 ```
 
+To train on Flickr8k plus a small VizWiz subset:
+
+```python
+from pathlib import Path
+
+from cs444_captioning.data import build_flickr8k_vizwiz_splits
+
+train_df, val_df, test_df, data_meta = build_flickr8k_vizwiz_splits(
+    flickr8k_root=Path("./data/flickr8k"),
+    vizwiz_root=Path("./data/vizwiz"),
+    vizwiz_train_images=10000,
+    vizwiz_val_images=1000,
+    seed=CFG.seed,
+)
+
+# These dataframes include image_path, so the dataset can use "." as image_dir.
+train_dataset = Flickr8kCaptionDataset(train_df, ".", image_processor, tokenizer, CFG.max_length)
+val_dataset = Flickr8kCaptionDataset(val_df, ".", image_processor, tokenizer, CFG.max_length)
+test_dataset = Flickr8kCaptionDataset(test_df, ".", image_processor, tokenizer, CFG.max_length)
+```
+
 ## Outputs
 
 Training and evaluation artifacts are written under:
@@ -182,4 +224,3 @@ Recommended next steps:
 6. Add LoRA only after the four core experiments are stable.
 
 ## Team
-

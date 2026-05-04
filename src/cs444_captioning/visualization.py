@@ -4,12 +4,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
 
+from .data import resolve_image_path
+
 
 def show_dataset_example(df, image_dir, image_name=None):
     if image_name is None:
-        image_name = df.iloc[0]["image"]
+        row = df.iloc[0]
+        image_name = row["image"]
+    else:
+        row = df[df["image"] == image_name].iloc[0]
     refs = df[df["image"] == image_name]["caption"].tolist()
-    img = Image.open(Path(image_dir) / image_name).convert("RGB")
+    img = Image.open(resolve_image_path(row, image_dir)).convert("RGB")
     plt.figure(figsize=(5, 5))
     plt.imshow(img)
     plt.axis("off")
@@ -32,7 +37,8 @@ def plot_training_history(history_df, title="Training History"):
 
 def show_predictions(predictions, image_dir, n=5):
     for row in predictions[:n]:
-        img = Image.open(Path(image_dir) / row["image_id"]).convert("RGB")
+        image_path = row.get("image_path", Path(image_dir) / row["image_id"])
+        img = Image.open(image_path).convert("RGB")
         plt.figure(figsize=(4, 4))
         plt.imshow(img)
         plt.axis("off")

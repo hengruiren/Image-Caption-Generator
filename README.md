@@ -1,6 +1,6 @@
 # Cross-Modal Alignment in Image Captioning
 
-**CS444 Final Project** | Hengrui Ren
+**CS444 Final Project** 
 
 ## Overview
 

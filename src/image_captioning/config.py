@@ -26,7 +26,7 @@ class Config:
     warmup_steps: int = 500
     gradient_accumulation_steps: int = 1
     fp16: bool = True
-    num_workers: int = 4
+    num_workers: int = 32
 
     # Generation
     num_beams: int = 4

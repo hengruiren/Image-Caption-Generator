@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Model checkpoints / outputs
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+outputs/
+logs/
+wandb/
+tensorboard/
+*.pth.tar
+
+# Data (typically large, never commit)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.zip
+*.tar
+*.tar.gz
+*.csv
+
+# Jupyter outputs
+*.html
+*.png
+*.pdf
+
+# Misc
+*.log

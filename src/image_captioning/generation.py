@@ -17,12 +17,18 @@ def generate_captions(model, val_rows, image_dir, image_processor, tokenizer, cf
 
     dataset = COCOCaptionDataset(unique_rows, image_dir, image_processor, tokenizer, cfg.max_length)
     loader = DataLoader(dataset, batch_size=cfg.eval_batch_size, shuffle=False,
-                        num_workers=cfg.num_workers, collate_fn=collate_fn)
+                        num_workers=0, collate_fn=collate_fn)
 
     predictions = {}
     for batch in tqdm(loader, desc="Generating"):
         pixel_values = batch["pixel_values"].to(device)
-        output_ids = model.generate(pixel_values, num_beams=cfg.num_beams, max_length=cfg.max_length)
+        output_ids = model.generate(
+            pixel_values,
+            num_beams=cfg.num_beams,
+            max_length=cfg.max_length,
+            no_repeat_ngram_size=3,
+            repetition_penalty=1.5,
+        )
         decoded = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         for image_id, caption in zip(batch["image_id"], decoded):
             predictions[image_id] = caption.strip()

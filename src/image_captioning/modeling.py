@@ -3,6 +3,7 @@ import torch.nn as nn
 from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
+    AutoConfig,
     VisionEncoderDecoderModel,
     CLIPVisionModel,
     CLIPImageProcessor,
@@ -31,23 +32,33 @@ class CaptioningModel(nn.Module):
         self.use_mapper = use_mapper
         self.device = device
 
+        enc_config = AutoConfig.from_pretrained(encoder_name)
+        dec_config = AutoConfig.from_pretrained(decoder_name)
+
+        if self.use_clip:
+            enc_dim = enc_config.vision_config.hidden_size
+            enc_config.hidden_size = enc_dim
+        else:
+            enc_dim = enc_config.hidden_size
+
+        dec_dim = dec_config.hidden_size
+
+        dec_config.is_decoder = True
+        dec_config.add_cross_attention = True
+
         self.base = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            encoder_name, decoder_name
+            encoder_name, decoder_name, encoder_config=enc_config, decoder_config=dec_config
         )
 
-        self.base.config.decoder_start_token_id = tokenizer.bos_token_id or tokenizer.eos_token_id
         self.base.config.eos_token_id = tokenizer.eos_token_id
         self.base.config.pad_token_id = tokenizer.pad_token_id
         self.base.config.vocab_size = self.base.config.decoder.vocab_size
-        self.base.config.decoder.is_decoder = True
-        self.base.config.decoder.add_cross_attention = True
+        self.base.config.decoder_start_token_id = tokenizer.bos_token_id or tokenizer.eos_token_id
 
         for param in self.base.encoder.parameters():
             param.requires_grad = False
 
         if use_mapper:
-            enc_dim = self.base.encoder.config.hidden_size
-            dec_dim = self.base.decoder.config.hidden_size
             self.mapper = MLPMapper(in_dim=enc_dim, hidden_dim=1024, out_dim=dec_dim)
         else:
             self.mapper = None
@@ -76,6 +87,7 @@ class CaptioningModel(nn.Module):
 
 
 def build_model(encoder_name, use_mapper, tokenizer, device):
+    print(f"  Building model: encoder={encoder_name}  mapper={use_mapper}")
     model = CaptioningModel(encoder_name, "gpt2", use_mapper, tokenizer, device)
     return model.to(device)
 

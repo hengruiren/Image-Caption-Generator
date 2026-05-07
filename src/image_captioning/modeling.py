@@ -7,6 +7,7 @@ from transformers import (
     VisionEncoderDecoderModel,
     CLIPVisionModel,
     CLIPImageProcessor,
+    GPT2LMHeadModel,
 )
 
 
@@ -37,7 +38,6 @@ class CaptioningModel(nn.Module):
 
         if self.use_clip:
             enc_dim = enc_config.vision_config.hidden_size
-            enc_config.hidden_size = enc_dim
         else:
             enc_dim = enc_config.hidden_size
 
@@ -46,9 +46,14 @@ class CaptioningModel(nn.Module):
         dec_config.is_decoder = True
         dec_config.add_cross_attention = True
 
-        self.base = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            encoder_name, decoder_name, encoder_config=enc_config, decoder_config=dec_config
-        )
+        if self.use_clip:
+            encoder = CLIPVisionModel.from_pretrained(encoder_name)
+            decoder = GPT2LMHeadModel.from_pretrained(decoder_name, config=dec_config)
+            self.base = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
+        else:
+            self.base = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+                encoder_name, decoder_name, encoder_config=enc_config, decoder_config=dec_config
+            )
 
         self.base.config.eos_token_id = tokenizer.eos_token_id
         self.base.config.pad_token_id = tokenizer.pad_token_id
@@ -64,26 +69,28 @@ class CaptioningModel(nn.Module):
             self.mapper = None
 
     def forward(self, pixel_values, labels=None, encoder_outputs=None):
-        if self.mapper is not None:
-            enc_out = self.base.encoder(pixel_values=pixel_values)
-            mapped = self.mapper(enc_out.last_hidden_state)
-
+        if self.use_clip or self.mapper is not None:
             from transformers.modeling_outputs import BaseModelOutput
-            enc_out_mapped = BaseModelOutput(last_hidden_state=mapped)
-            return self.base(encoder_outputs=enc_out_mapped, labels=labels)
+            with torch.no_grad():
+                enc_out = self.base.encoder(pixel_values=pixel_values)
+            hidden = enc_out.last_hidden_state
+            if self.mapper is not None:
+                hidden = self.mapper(hidden)
+            return self.base(encoder_outputs=BaseModelOutput(last_hidden_state=hidden), labels=labels)
 
         return self.base(pixel_values=pixel_values, labels=labels)
 
-    def generate(self, pixel_values, num_beams=4, max_length=40):
-        if self.mapper is not None:
-            enc_out = self.base.encoder(pixel_values=pixel_values)
-            mapped = self.mapper(enc_out.last_hidden_state)
-
+    def generate(self, pixel_values, num_beams=4, max_length=40, **kwargs):
+        if self.use_clip or self.mapper is not None:
             from transformers.modeling_outputs import BaseModelOutput
-            enc_out_mapped = BaseModelOutput(last_hidden_state=mapped)
-            return self.base.generate(encoder_outputs=enc_out_mapped, num_beams=num_beams, max_length=max_length)
+            with torch.no_grad():
+                enc_out = self.base.encoder(pixel_values=pixel_values)
+            hidden = enc_out.last_hidden_state
+            if self.mapper is not None:
+                hidden = self.mapper(hidden)
+            return self.base.generate(encoder_outputs=BaseModelOutput(last_hidden_state=hidden), num_beams=num_beams, max_length=max_length, **kwargs)
 
-        return self.base.generate(pixel_values=pixel_values, num_beams=num_beams, max_length=max_length)
+        return self.base.generate(pixel_values=pixel_values, num_beams=num_beams, max_length=max_length, **kwargs)
 
 
 def build_model(encoder_name, use_mapper, tokenizer, device):

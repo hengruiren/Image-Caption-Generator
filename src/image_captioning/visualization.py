@@ -63,14 +63,15 @@ def show_sample_images(rows, image_dir, n=4):
 def show_predictions_comparison(image_ids, predictions_dict, ref_map, image_dir, val_rows, n=4):
     image_dir = Path(image_dir)
     id_to_file = {r["image_id"]: r["file_name"] for r in val_rows}
-    sample_ids = image_ids[:n]
+    valid_ids = [iid for iid in image_ids if iid in id_to_file][:n]
+    n = len(valid_ids)
     exp_names = list(predictions_dict.keys())
 
     fig, axes = plt.subplots(n, 1, figsize=(14, 5 * n))
     if n == 1:
         axes = [axes]
 
-    for ax, img_id in zip(axes, sample_ids):
+    for ax, img_id in zip(axes, valid_ids):
         img = mpimg.imread(image_dir / id_to_file[img_id])
         ax.imshow(img)
         ax.axis("off")

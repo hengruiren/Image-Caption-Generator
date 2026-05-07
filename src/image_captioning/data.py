@@ -71,9 +71,13 @@ class COCOCaptionDataset(Dataset):
 
     def _build_pixel_cache(self):
         from tqdm import tqdm
+        from PIL import Image
         for row in tqdm(self.rows, desc="Preprocessing images", leave=False):
             img_path = self.image_dir / row["file_name"]
-            image = Image.open(img_path).convert("RGB")
+            try:
+                image = Image.open(img_path).convert("RGB")
+            except Exception:
+                continue
             self._pixel_cache[row["image_id"]] = (
                 self.image_processor(images=image, return_tensors="pt").pixel_values.squeeze(0)
             )
@@ -82,12 +86,24 @@ class COCOCaptionDataset(Dataset):
         return len(self.rows)
 
     def __getitem__(self, idx):
-        row = self.rows[idx]
-        if self.preprocess == 'cache':
-            pixel_values = self._pixel_cache[row["image_id"]]
+        for _ in range(10):
+            row = self.rows[idx]
+            if self.preprocess == 'cache':
+                pixel_values = self._pixel_cache.get(row["image_id"])
+                if pixel_values is None:
+                    idx = (idx + 1) % len(self.rows)
+                    continue
+            else:
+                image_path = self.image_dir / row["file_name"]
+                try:
+                    image = Image.open(image_path).convert("RGB")
+                except Exception:
+                    idx = (idx + 1) % len(self.rows)
+                    continue
+                pixel_values = self.image_processor(images=image, return_tensors="pt").pixel_values.squeeze(0)
+            break
         else:
-            image = Image.open(self.image_dir / row["file_name"]).convert("RGB")
-            pixel_values = self.image_processor(images=image, return_tensors="pt").pixel_values.squeeze(0)
+            raise RuntimeError(f"Failed to load a valid image after 10 retries near index {idx}")
         tokenized = self.tokenizer(
             row["caption"],
             padding="max_length",

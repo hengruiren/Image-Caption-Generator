@@ -20,14 +20,17 @@ def plot_loss_curve(history_df, exp_name):
 
 
 def plot_results_table(results_df):
-    display_df = results_df[["Experiment", "BLEU-4", "METEOR", "CIDEr"]].copy()
+    cols = ["Experiment"] + [c for c in ["BLEU-1", "BLEU-4", "METEOR", "CIDEr"] if c in results_df.columns]
+    display_df = results_df[cols].copy()
     display_df = display_df.sort_values("CIDEr", ascending=False).reset_index(drop=True)
     return display_df
 
 
 def plot_metric_bars(results_df):
-    metrics = ["BLEU-4", "METEOR", "CIDEr"]
-    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+    metrics = [m for m in ["BLEU-4", "METEOR", "CIDEr"] if m in results_df.columns]
+    fig, axes = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5))
+    if len(metrics) == 1:
+        axes = [axes]
     for ax, metric in zip(axes, metrics):
         sns.barplot(data=results_df, x="Experiment", y=metric, ax=ax, palette="Blues_d")
         ax.set_title(metric)
@@ -50,7 +53,10 @@ def show_sample_images(rows, image_dir, n=4):
         if len(samples) == n:
             break
 
+    n = min(n, len(samples))
     fig, axes = plt.subplots(1, n, figsize=(4 * n, 4))
+    if n == 1:
+        axes = [axes]
     for ax, row in zip(axes, samples):
         img = mpimg.imread(image_dir / row["file_name"])
         ax.imshow(img)

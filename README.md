@@ -27,26 +27,77 @@ All models are trained on a 30k subset of MS-COCO train2017 and evaluated on COC
 - **METEOR** — Harmonic mean of precision and recall, accounts for synonyms
 - **CIDEr** — Consensus-based similarity, weighted by term relevance
 
+## Datasets
+
+This project uses **MS-COCO 2017**. The `datasets` library can download it automatically when you run the notebook.
+
+**Automatic (recommended):** Handled via HuggingFace `datasets`:
+```python
+from datasets import load_dataset
+ds = load_dataset("HuggingFaceM4/COCO", trust_remote_code=True)
+```
+
+**Manual download:**
+1. Visit [https://cocodataset.org/#download](https://cocodataset.org/#download)
+2. Download:
+   - `2017 Train images` (~18 GB)
+   - `2017 Val images` (~1 GB)
+   - `2017 Train/Val annotations`
+3. Extract into a local directory and update the data path in `src/image_captioning/config.py`
+
+## Setup & Running
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Or manually:
+
+```bash
+pip install torch>=2.0.0 torchvision>=0.15.0
+pip install transformers==4.44.0 accelerate datasets peft
+pip install pycocoevalcap pycocotools
+pip install pandas numpy matplotlib seaborn tqdm pillow scikit-learn nltk
+```
+
+### 2. Run via notebook
+
+Open and run all cells in `image_captioning.ipynb`. The notebook:
+- Downloads and preprocesses the COCO dataset
+- Trains all four model configurations sequentially
+- Evaluates with BLEU-4, METEOR, and CIDEr
+- Generates visualizations and comparison tables
+
+```bash
+jupyter notebook image_captioning.ipynb
+```
+
+### 3. Run model 3 standalone
+
+To train and evaluate the CLIP + MLP mapper configuration independently:
+
+```bash
+python run_model3.py
+```
+
 ## Project Structure
 
 ```
 Image_Caption_Generator/
-├── src/image_captioning/
-│   ├── config.py         # Hyperparameters and experiment configuration
-│   ├── data.py           # COCO data loading and Dataset class
-│   ├── modeling.py       # Model definitions (ViT/CLIP × No Mapper/MLP)
-│   ├── training.py       # Training loop
-│   ├── evaluation.py     # BLEU-4, METEOR, CIDEr evaluation
-│   ├── generation.py     # Caption generation (beam search)
-│   └── visualization.py  # Plots, attention heatmaps, result tables
-└── image_captioning.ipynb  # Main notebook: runs all experiments and figures
-```
-
-## Setup
-
-```bash
-pip install transformers==4.44.0 datasets accelerate pycocoevalcap
-pip install pandas matplotlib seaborn tqdm pillow torch
+├── src/
+│   └── image_captioning/
+│       ├── config.py         # Hyperparameters and experiment configuration
+│       ├── data.py           # COCO data loading and Dataset class
+│       ├── modeling.py       # Model definitions (ViT/CLIP × No Mapper/MLP)
+│       ├── training.py       # Training loop
+│       ├── evaluation.py     # BLEU-4, METEOR, CIDEr evaluation
+│       ├── generation.py     # Caption generation (beam search)
+│       └── visualization.py  # Plots, attention heatmaps, result tables
+├── image_captioning.ipynb    # Main notebook: runs all experiments and figures
+├── run_model3.py             # Standalone script for CLIP + MLP mapper
+└── requirements.txt
 ```
 
 ## Models

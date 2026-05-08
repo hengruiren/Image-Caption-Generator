@@ -1,14 +1,12 @@
 # Cross-Modal Alignment in Image Captioning
 
-**CS444 Final Project** 
-
 ## Overview
 
-This project compares four cross-modal alignment strategies for image captioning, using a controlled encoder-decoder framework (ViT/CLIP → GPT-2). The central question is: how does the choice of visual encoder and projection module affect caption quality and cross-domain generalization?
+This project investigates cross-modal alignment strategies for image captioning within a controlled encoder-decoder framework (ViT/CLIP → GPT-2). Four configurations are compared by varying the visual encoder (Vanilla ViT vs. CLIP ViT) and whether an explicit MLP projection module bridges the two modalities. All models are trained and evaluated on MS-COCO 2017 to isolate the effect of each alignment choice on caption quality and cross-domain generalization.
 
 ## Research Question
 
-In encoder-decoder multimodal architectures, how can we most effectively align the representation spaces of a pretrained vision encoder (ViT / CLIP ViT) and a pretrained language model (GPT-2)?
+In encoder-decoder multimodal architectures, how does the choice of visual encoder (Vanilla ViT vs. CLIP ViT) and projection module (no mapper vs. MLP mapper) affect caption quality and cross-domain generalization?
 
 ## Experiment Matrix
 
@@ -102,19 +100,28 @@ Image_Caption_Generator/
 
 ## Models
 
-- **Encoder (baseline):** `google/vit-base-patch16-224-in21k` — 86M params, ImageNet-21k pretrained
-- **Encoder (experiment):** `openai/clip-vit-base-patch16` — CLIP-aligned visual features
-- **Decoder:** `gpt2` — 124M params; cross-attention weights trained from scratch
-- **MLP Mapper:** `Linear(768→1024) → ReLU → Dropout(0.1) → Linear(1024→768) → LayerNorm`
+| Component | Model | Parameters | Notes |
+|---|---|---|---|
+| Encoder (baseline) | `google/vit-base-patch16-224-in21k` | 86M | ImageNet-21k pretrained |
+| Encoder (CLIP) | `openai/clip-vit-base-patch16` | 86M | CLIP-aligned visual features |
+| Decoder | `gpt2` | 124M | Cross-attention weights trained from scratch |
+| MLP Mapper | Linear(768→1024) → ReLU → Dropout(0.1) → Linear(1024→768) → LayerNorm | — | Optional visual-to-language projection |
+
+Encoders are **frozen** during training; only the decoder cross-attention and optional mapper are updated.
 
 ## Training Details
 
-- Dataset: MS-COCO 2017 (30k train subset / 5k val)
-- Encoder: frozen during training
-- Optimizer: AdamW, lr=5e-5
-- Epochs: 5
-- Batch size: 32 (A100)
-- Mixed precision: FP16
+| Setting | Value |
+|---|---|
+| Dataset | MS-COCO 2017 |
+| Train split | 30k subset of train2017 |
+| Val split | val2017 (5k images) |
+| Optimizer | AdamW |
+| Learning rate | 5e-5 |
+| Epochs | 5 |
+| Batch size | 32 |
+| Mixed precision | FP16 |
+| Encoder | Frozen |
 
 ## References
 
